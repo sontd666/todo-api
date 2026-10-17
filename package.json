@@ -1,0 +1,22 @@
+{
+  "name": "lesson5-todo-api-starter",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Starter codebase for Lesson 5: Backend Architecture & Codebase Design",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "nodemon": "^1.14.10"
+  }
+}
