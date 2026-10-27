@@ -1,8 +1,8 @@
-# Lesson 5 — Todo API Starter
+# Lesson 5 — Todo API
 
-This is the starting codebase for the guided lab **Backend Architecture & Codebase Design**.
+Codebase for the guided lab **Backend Architecture & Codebase Design**.
 
-The `POST /todos` endpoint intentionally starts with multiple responsibilities in one route handler. Your first task is to extract database access into a repository, then continue with service and controller layers.
+The lab started with a `POST /todos` endpoint that did everything in one route handler. It has since been split into routes, controllers, services and repositories, wired together in one composition root. Creating a todo also writes an audit log entry in the same database transaction.
 
 ## Requirements
 
@@ -24,7 +24,7 @@ docker compose up -d db
 cp .env.example .env
 ```
 
-The example `.env` is configured for this local database. Apply the schema:
+The example `.env` is configured for this local database. Apply the schema, which creates the `todos` and `audit_logs` tables:
 
 ```bash
 docker compose exec -T db psql -U postgres -d lesson5_todos < db/schema.sql
@@ -32,9 +32,15 @@ docker compose exec -T db psql -U postgres -d lesson5_todos < db/schema.sql
 
 If you already have PostgreSQL running locally, you can instead update `DATABASE_URL` in `.env` to use your own credentials and run `db/schema.sql` against that database.
 
+| Variable       | Default                                                       | Description                                        |
+| -------------- | ------------------------------------------------------------- | -------------------------------------------------- |
+| `PORT`         | `3000`                                                        | Port the API listens on                            |
+| `DATABASE_URL` | `postgresql://postgres:postgres@localhost:5432/lesson5_todos` | PostgreSQL connection string                       |
+| `DATABASE_SSL` | `false`                                                       | Set to `true` only if your PostgreSQL requires SSL |
+
 ## 3. Run the API
 
-Development mode:
+Development mode (restarts on file changes):
 
 ```bash
 npm run dev
@@ -54,7 +60,7 @@ Health check:
 curl http://localhost:3000/health
 ```
 
-## 4. Try the current endpoint
+## 4. Try the endpoint
 
 ```bash
 curl -i -X POST http://localhost:3000/todos \
@@ -62,7 +68,7 @@ curl -i -X POST http://localhost:3000/todos \
   -d '{"title":"Learn backend architecture"}'
 ```
 
-Expected successful response: `201 Created`, with a `data` object containing `id`, `title`, and `status`.
+Expected successful response: `201 Created`, with a `data` object containing `id`, `title`, and `status`. A matching row with action `TODO_CREATED` is written to `audit_logs`.
 
 Try an invalid title:
 
@@ -72,36 +78,74 @@ curl -i -X POST http://localhost:3000/todos \
   -d '{"title":"   "}'
 ```
 
-Expected response: `400 Bad Request`.
+Expected response: `400 Bad Request` with a `message`. A non-string `title` is also rejected with `400`.
 
-## 5. Lesson tasks
+## 5. Tests and formatting
 
-Do not rewrite everything at once. Make one small change, run the endpoint, and inspect the result.
+```bash
+npm test                     # run unit tests (no database needed)
+npm run format               # format all files with Prettier
+npm run format:check         # check formatting without changing files
+```
 
-1. **Step 1 — Extract Repository:** Create `src/repositories/todo.repository.js`. Move the SQL query there. The repository should return the created Todo object and should not know about Express or HTTP status codes.
-2. **Step 2 — Extract Service:** Create `src/services/todo.service.js`. Move application/business rules out of the route handler. Decide which validation belongs at the request boundary and which rules belong in the service.
-3. **Step 3 — Extract Controller:** Create `src/controllers/todo.controller.js`. Keep HTTP request/response mapping in the controller.
-4. **Step 4 — Wire dependencies:** Keep route definitions focused on mapping the HTTP route to the controller. Keep centralized error handling.
-5. **Step 5 — Review:** Explain the dependency direction, what can be unit-tested independently, and whether a separate repository is worth it for this small API.
+Run a single test by name:
 
-## Current structure
+```bash
+node --test --test-name-pattern="trim" src/tests/*.test.js
+```
+
+## Architecture
 
 ```text
-lesson5-todo-api-starter/
+HTTP request
+  → routes/todos.routes.js              maps the URL to a controller
+  → controllers/todos.controllers.js    reads the request, checks its shape, sends the response
+  → services/todos.services.js          business rules, transaction boundary
+  → repositories/*.repositories.js      SQL only
+  → db/pool.js                          shared pg connection pool
+```
+
+- **Dependency wiring:** `src/container.js` creates the repositories and the service and passes in their dependencies. Each layer is a factory function, such as `createTodoService({ todoRepository, auditRepository, withTransaction })`, so unit tests can pass fakes instead of a real database.
+- **Transactions:** `src/db/transaction-manager.js` provides `withTransaction`, which runs a callback inside `BEGIN`/`COMMIT` and rolls back on error. Repository methods take an optional `client` argument, so they can run inside a transaction or directly on the pool.
+- **Validation:** the controller checks that `title` is a string. The service checks that the trimmed title is not empty. Both throw `ValidationError`.
+- **Error handling:** the error middleware in `src/app.js` turns `ValidationError` into `400` and any other error into `500 Internal server error`.
+
+## Project structure
+
+```text
 ├── db/
 │   └── schema.sql
 ├── docker-compose.yml
 ├── src/
+│   ├── controllers/
+│   │   └── todos.controllers.js
 │   ├── db/
-│   │   └── pool.js
+│   │   ├── pool.js
+│   │   └── transaction-manager.js
+│   ├── errors/
+│   │   └── validation.error.js
+│   ├── repositories/
+│   │   ├── audits.repositories.js
+│   │   └── todos.repositories.js
 │   ├── routes/
 │   │   └── todos.routes.js
+│   ├── services/
+│   │   └── todos.services.js
+│   ├── tests/
+│   │   └── todo.service.test.js
 │   ├── app.js
+│   ├── container.js
 │   └── server.js
 ├── .env.example
-├── .gitignore
+├── .prettierrc.json
 ├── package.json
 └── README.md
 ```
 
-The `repositories/`, `services/`, and `controllers/` directories are intentionally not created yet; you will add them during the lab.
+## Lesson tasks
+
+1. **Extract Repository:** done in `src/repositories/todos.repositories.js`.
+2. **Extract Service:** done in `src/services/todos.services.js`.
+3. **Extract Controller:** done in `src/controllers/todos.controllers.js`.
+4. **Wire dependencies:** done in `src/container.js`. Error handling stays centralized in `src/app.js`.
+5. **Review:** explain the dependency direction, what can be unit-tested independently, and whether a separate repository is worth it for this small API.
