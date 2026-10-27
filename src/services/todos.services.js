@@ -1,10 +1,6 @@
 const { ValidationError } = require('../errors/validation.error');
 
-const createTodoService = ({
-  todoRepository,
-  auditRepository,
-  withTransaction,
-}) => ({
+const createTodoService = ({ todoRepository, auditRepository, withTransaction }) => ({
   createTodo: async (rawTitle) => {
     const title = typeof rawTitle === 'string' ? rawTitle.trim() : '';
 
@@ -13,15 +9,9 @@ const createTodoService = ({
     }
 
     const newTodo = await withTransaction(async (client) => {
-      const newTodo = await todoRepository.create(
-        { title, status: 'open' },
-        client,
-      );
+      const newTodo = await todoRepository.create({ title, status: 'open' }, client);
 
-      await auditRepository.create(
-        { todoId: newTodo.id, action: 'TODO_CREATED' },
-        client,
-      );
+      await auditRepository.create({ todoId: newTodo.id, action: 'TODO_CREATED' }, client);
 
       return newTodo;
     });

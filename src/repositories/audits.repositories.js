@@ -10,9 +10,7 @@ const createAuditRepository = () => ({
       [todoId, action],
     );
 
-    throw new Error('Test');
-
-    // return result.rows[0];
+    return result.rows[0];
   },
 });
 
