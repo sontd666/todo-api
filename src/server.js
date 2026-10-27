@@ -15,7 +15,8 @@ function shutdown(signal) {
     // Requiring the pool here allows the server to stop accepting requests
     // before closing database connections.
     const pool = require('./db/pool');
-    pool.end()
+    pool
+      .end()
       .catch((error) => console.error('Error closing PostgreSQL pool:', error))
       .finally(() => process.exit(0));
   });
